@@ -12,6 +12,8 @@
 
 #include "common.hpp"
 
+uint16_t SERVER_OFFSET;
+
 /// A sharded service across cores.
 class throughput_service
 {
@@ -19,7 +21,11 @@ public:
   seastar::future<> run_tcp()
   {
     return seastar::with_gate(gate_, [this]() {
-      const uint16_t port = 1300 + seastar::this_shard_id();
+      // Building a TCP server on seastar is different from a UDP server.
+      // It seems like every shard needs to listen on the same port, and connection
+      // requests are load balanced across shards.
+      // https://github.com/scylladb/seastar/issues/2183
+      const uint16_t port = 1300 + SERVER_OFFSET;
       std::cout << "Starting TCP server on shard " << seastar::this_shard_id() << " - listening port: " << port << std::endl;
       return seastar::do_with(seastar::listen(seastar::make_ipv4_address({port})), [this](auto& listener) {
         std::cout << "TCP server on shard " << seastar::this_shard_id() << " now listening" << std::endl;
@@ -115,7 +121,7 @@ seastar::future<> write_throughput_report(seastar::sharded<throughput_service>& 
       })
       // Then, take the measurements and dump them to a file.
       .then([](auto shard_measurements) {
-        dump_measurements("server_report.csv", shard_measurements);
+        dump_measurements("server_report_" + std::to_string(SERVER_OFFSET) + ".csv", shard_measurements);
         return seastar::make_ready_future<>();
       });
 }
@@ -123,8 +129,13 @@ seastar::future<> write_throughput_report(seastar::sharded<throughput_service>& 
 int main(int argc, char** argv)
 {
   seastar::app_template app;
+  app.add_options()("server_offset", boost::program_options::value<uint16_t>()->default_value(0), "Server offset for the server shard to listen on");
+  if (seastar::smp::count != 0) {
+    throw std::runtime_error("The TCP server must be run on a single core.");
+  }
 
-  return app.run(argc, argv, [] {
+  return app.run(argc, argv, [&app] {
+    SERVER_OFFSET = app.configuration()["server_offset"].as<uint16_t>();
     auto service = std::make_shared<seastar::sharded<throughput_service>>();
 
     seastar::engine().at_exit([service] {
