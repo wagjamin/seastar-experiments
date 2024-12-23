@@ -1,0 +1,24 @@
+---
+Language: Cpp
+BasedOnStyle: Google
+ColumnLimit: 150
+IndentWidth: 2
+AccessModifierOffset: -2
+AlignAfterOpenBracket: AlwaysBreak
+BinPackArguments: false
+BinPackParameters: false
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortFunctionsOnASingleLine: Empty
+BreakBeforeBraces: Mozilla
+AlwaysBreakTemplateDeclarations: Yes
+BreakConstructorInitializers: BeforeComma
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+LambdaBodyIndentation: Signature
+AllowShortLambdasOnASingleLine: Empty
+FixNamespaceComments: true
+NamespaceIndentation: None
+DerivePointerAlignment: false
+PointerAlignment: Left
+SortIncludes: true
+SpacesBeforeTrailingComments: 2
+Standard: c++17 
