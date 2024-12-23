@@ -24,6 +24,7 @@ public:
 
     // Create and connect TCP socket
     return seastar::connect(seastar::make_ipv4_address({server_ip, target_port})).then([this](seastar::connected_socket socket) {
+      std::cout << "Shard " << seastar::this_shard_id() << " connected to target port"<< std::endl;
       auto packet = std::vector<char>(PACKET_SIZE, 'A');
       auto output = socket.output();
 

@@ -16,13 +16,13 @@
 class throughput_service
 {
 public:
-  // TODO(benjamin): Interrupting doesn't work properly yet
   seastar::future<> run_tcp()
   {
     return seastar::with_gate(gate_, [this]() {
       const uint16_t port = 1300 + seastar::this_shard_id();
       std::cout << "Starting TCP server on shard " << seastar::this_shard_id() << " - listening port: " << port << std::endl;
       return seastar::do_with(seastar::listen(seastar::make_ipv4_address({port})), [this](auto& listener) {
+        std::cout << "TCP server on shard " << seastar::this_shard_id() << " now listening" << std::endl;
         listener_ = &listener;
         return seastar::repeat([this, &listener]() {
           return listener.accept().then_wrapped([this](auto&& f) {
