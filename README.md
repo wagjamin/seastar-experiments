@@ -24,6 +24,7 @@ cmake -DCMAKE_BUILD_TYPE=Debug -GNinja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPIL
 ninja
 ```
 
+### Running UDP Benchmarks
 After that, you can easily run both the server and the client:
 ```sh
 # Start the server, listens for UDP packets on ports [1200, ..., 1200 + <num_shards>[
@@ -42,3 +43,15 @@ sudo sysctl -w kernel.perf_event_paranoid=1
 Plot:
 - Receive PPS given a certain number of CPU cores
 - No acknowledging, server just sends packets and we see what arrives on the consumer side
+
+### Running TCP Benchmarks
+If you want to run the TCP benchmarks, you can do so by running the following in separate shell sessions:
+```sh
+./tcp_run_servers.sh <num_servers>
+./tcp_run_clients.sh <num_clients>
+```
+
+Note that we ran into some limitations with scaling multiple TCP connections on a single seastar process.
+This might just be because we aren't seastar experts.
+To keep the benchmarks simple & fair, we thus start a certain number of seastar processes and pin them to independent cores.
+We also start a set of client processes that each connect to a different seastar server.
