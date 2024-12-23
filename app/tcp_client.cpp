@@ -27,70 +27,58 @@ class throughput_service
 public:
   seastar::future<> run_tcp(const std::string& server_ip)
   {
-    // All server shards bind to the same port. Client requests are multiplexed across
-    // server shards.
     const uint16_t target_port = 1300 + CLIENT_OFFSET;
     std::cout << "Shard " << seastar::this_shard_id() << " writing to TCP port " << target_port << std::endl;
 
     // Create multiple concurrent connections
-    return seastar::do_with(std::vector<seastar::future<>>(), [this, server_ip, target_port](auto& futures) {
-      futures.reserve(CONCURRENT_CONNECTIONS);
+    for (uint16_t i = 0; i < CONCURRENT_CONNECTIONS; ++i) {
+      (void)seastar::with_gate(gate_,
+          [this, i, &server_ip, target_port]() {
+            return seastar::connect(seastar::make_ipv4_address({server_ip, target_port}))
+                .then([this, i](seastar::connected_socket socket) {
+                  auto packet = std::vector<char>(PACKET_SIZE, 'A');
+                  auto output = socket.output();
 
-      // Launch multiple concurrent connections
-      for (uint16_t i = 0; i < CONCURRENT_CONNECTIONS; ++i) {
-        futures.push_back(seastar::connect(seastar::make_ipv4_address({server_ip, target_port}))
-                              .then([this, i](seastar::connected_socket socket) {
-                                auto packet = std::vector<char>(PACKET_SIZE, 'A');
-                                auto output = socket.output();
+                  return seastar::do_with(
+                      std::move(output), std::move(packet), [this, i](seastar::output_stream<char>& output, auto& packet) {
+                        return seastar::repeat([this, &output, &packet, i]() {
+                          if (interrupted_) {
+                            return output.close().then([] {
+                              return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
+                            });
+                          }
 
-                                return seastar::do_with(
-                                    std::move(output), std::move(packet), [this, i](seastar::output_stream<char>& output, auto& packet) {
-                                      return seastar::repeat([this, &output, &packet, i]() {
-                                        if (interrupted_) {
-                                          return output.close().then([] {
-                                            return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
-                                          });
-                                        }
-
-                                        // std::cout << "Shard " << seastar::this_shard_id() << " writing packet on connection " << i << " to server"
-                                        // << std::endl;
-
-                                        return output.write(packet.data(), packet.size())
-                                            .then([&output] {
-                                              return output.flush();
-                                            })
-                                            // .then([] {
-                                            //   // Once we start sleeping, you can see all shards becoming active.
-                                            //   return seastar::sleep(std::chrono::milliseconds(10));
-                                            // })
-                                            .then([this] {
-                                              measurements.add_bytes(PACKET_SIZE);
-                                              measurements.add_packets(1);
-                                              return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::no);
-                                            });
-                                      });
-                                    });
+                          return output.write(packet.data(), packet.size())
+                              .then([&output] {
+                                return output.flush();
                               })
-                              .handle_exception([i](std::exception_ptr ep) {
-                                try {
-                                  std::rethrow_exception(ep);
-                                } catch (const std::exception& e) {
-                                  std::cerr << "Connection " << i << " failed: " << e.what() << std::endl;
-                                }
-                                return seastar::make_ready_future<>();
-                              }));
-      }
-      // Wait for all connections to complete
-      return seastar::when_all_succeed(futures.begin(), futures.end());
-    });
+                              .then([this] {
+                                measurements.add_bytes(PACKET_SIZE);
+                                measurements.add_packets(1);
+                                return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::no);
+                              });
+                        });
+                      });
+                })
+                .handle_exception([i](std::exception_ptr ep) {
+                  try {
+                    std::rethrow_exception(ep);
+                  } catch (const std::exception& e) {
+                    std::cerr << "Connection " << i << " failed: " << e.what() << std::endl;
+                  }
+                  return seastar::make_ready_future<>();
+                });
+          });
+    }
+    
+    return gate_.close();
   }
 
   seastar::future<> stop()
   {
     std::cout << "Stopping seastar service on " << seastar::this_shard_id() << "\n";
-    // Mark the state as interrupted.
     interrupted_ = true;
-    return seastar::make_ready_future<>();
+    return gate_.close();
   }
 
   seastar::future<> setup_reporter()
@@ -114,6 +102,7 @@ private:
   seastar::timer<> timer;
   // The throughput measurements for this shard.
   MeasurementDevice measurements;
+  seastar::gate gate_;
 };
 
 // Write the benchmark report.
