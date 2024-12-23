@@ -12,6 +12,15 @@
         "tuple": "cpp",
         "valarray": "cpp",
         "variant": "cpp",
-        "format": "cpp"
+        "format": "cpp",
+        "istream": "cpp",
+        "ostream": "cpp",
+        "exception": "cpp",
+        "memory_resource": "cpp",
+        "iosfwd": "cpp",
+        "new": "cpp",
+        "shared_mutex": "cpp",
+        "stop_token": "cpp",
+        "streambuf": "cpp"
     }
 }

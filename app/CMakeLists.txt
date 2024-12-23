@@ -8,12 +8,17 @@ add_executable (server
 target_link_libraries (server
   Seastar::seastar)
 
+add_executable (client
+  client.cpp)
+target_link_libraries (client
+  Seastar::seastar)
+
 add_executable (tcp_server
   tcp_server.cpp)
 target_link_libraries (tcp_server
   Seastar::seastar)
 
-add_executable (client
-  client.cpp)
-target_link_libraries (client
+add_executable (tcp_client
+  tcp_client.cpp)
+target_link_libraries (tcp_client
   Seastar::seastar)
