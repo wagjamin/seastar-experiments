@@ -38,14 +38,13 @@ public:
             auto res = f.get();
             std::cout << "Accepted connection from " << res.remote_address << "\n";
 
-            return seastar::with_gate(
-                       gate_,
-                       [this, conn = std::move(res.connection), addr = res.remote_address]() mutable {
-                         return handle_connection(std::move(conn), addr);
-                       })
-                .then([] {
-                  return seastar::stop_iteration::no;
+            (void) seastar::with_gate(
+                gate_,
+                [this, conn = std::move(res.connection), addr = res.remote_address]() mutable {
+                  return handle_connection(std::move(conn), addr);
                 });
+
+            return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::no);
           });
         });
       });
@@ -131,7 +130,7 @@ int main(int argc, char** argv)
   seastar::app_template app;
   app.add_options()("server_offset", boost::program_options::value<uint16_t>()->default_value(0), "Server offset for the server shard to listen on");
   if (seastar::smp::count != 0) {
-    throw std::runtime_error("The TCP server must be run on a single core.");
+    // throw std::runtime_error("The TCP server must be run on a single core.");
   }
 
   return app.run(argc, argv, [&app] {
