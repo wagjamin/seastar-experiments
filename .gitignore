@@ -3,3 +3,6 @@ app/build-release
 .vscode
 *server_report*.csv
 *client_report*.csv
+plot/server_results.pdf
+plot/client_results.pdf
+.venv

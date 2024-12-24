@@ -13,7 +13,7 @@ constexpr uint16_t TCP_SERVER_PORT = 1300;
 // Historical traffic measurements in gbit/s and pps.
 struct Measurement {
   seastar::shard_id shard_id;
-  std::chrono::time_point<std::chrono::steady_clock> time;
+  std::chrono::time_point<std::chrono::system_clock> time;
   double gbits;
   size_t pps;
 };
@@ -33,7 +33,7 @@ struct MeasurementDevice {
     // Add the measurement to the backing tracker.
     measurements.push_back(Measurement{
         .shard_id = seastar::this_shard_id(),
-        .time = std::chrono::steady_clock::now(),
+        .time = std::chrono::system_clock::now(),
         .gbits = throughput_in_gbps,
         .pps = pps,
     });

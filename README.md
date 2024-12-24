@@ -45,6 +45,7 @@ Plot:
 - No acknowledging, server just sends packets and we see what arrives on the consumer side
 
 ### Running TCP Benchmarks
+#### Running the Experiments
 If you want to run the TCP benchmarks, make sure you built the tcp server and client in `app/build-release`.
 Then you can run the following commands in separate shell sessions:
 ```sh
@@ -59,3 +60,13 @@ Then you can run the following commands in separate shell sessions:
 
 You can play around with different configurations to see how the performance changes.
 
+### Plotting the Results
+If you want to plot the results after running the experiments, you can run:
+```sh
+pip3 install -r plot/requirements.txt
+python3 plot/plot_results.py
+```
+This will generate pdf plots in the `plot` directory that show the throughput and PPS over time.
+Note that PPS here is a bit misleading. This is the client- and server-side packets that are
+passed between the benchmark program and seastar.
+So this doesn't relate to the actual PPS passed over the network card.

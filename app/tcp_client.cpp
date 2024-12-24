@@ -58,14 +58,6 @@ public:
                       });
                 });
               });
-            })
-            .handle_exception([i](std::exception_ptr ep) {
-              try {
-                std::rethrow_exception(ep);
-              } catch (const std::exception& e) {
-                std::cerr << "Connection " << i << " failed: " << e.what() << std::endl;
-              }
-              return seastar::make_ready_future<>();
             });
       });
     }
@@ -77,14 +69,14 @@ public:
   {
     std::cout << "Stopping seastar service on " << seastar::this_shard_id() << "\n";
     interrupted_ = true;
-    return gate_.close();
+    return seastar::make_ready_future<>();
   }
 
   seastar::future<> setup_reporter()
   {
     // Interleave shards by 10 milliseconds to ensure that the report printing in cout doesn't
     // interleave.
-    return seastar::sleep(std::chrono::milliseconds(10* seastar::this_shard_id())).then([this]() {
+    return seastar::sleep(std::chrono::milliseconds(10 * seastar::this_shard_id())).then([this]() {
       timer.set_callback([this]() {
         measurements.tick();
       });
