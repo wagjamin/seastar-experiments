@@ -136,10 +136,6 @@ int main(int argc, char** argv)
       "Number of concurrent connections per core")(
       "client_offset", boost::program_options::value<uint16_t>()->default_value(0), "Client offset for the server shard to connect to");
 
-  if (seastar::smp::count != 0) {
-    // throw std::runtime_error("The TCP client must be run on a single core.");
-  }
-
   return app.run(argc, argv, [&app] {
     CONCURRENT_CONNECTIONS = app.configuration()["connections"].as<uint16_t>();
     CLIENT_OFFSET = app.configuration()["client_offset"].as<uint16_t>();

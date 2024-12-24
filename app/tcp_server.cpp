@@ -139,9 +139,6 @@ int main(int argc, char** argv)
 {
   seastar::app_template app;
   app.add_options()("server_offset", boost::program_options::value<uint16_t>()->default_value(0), "Server offset for the server shard to listen on");
-  if (seastar::smp::count != 0) {
-    // throw std::runtime_error("The TCP server must be run on a single core.");
-  }
 
   return app.run(argc, argv, [&app] {
     SERVER_OFFSET = app.configuration()["server_offset"].as<uint16_t>();

@@ -1,4 +1,5 @@
 app/build-debug
 app/build-release
 .vscode
-*_report.csv
+*server_report*.csv
+*client_report*.csv

@@ -45,13 +45,17 @@ Plot:
 - No acknowledging, server just sends packets and we see what arrives on the consumer side
 
 ### Running TCP Benchmarks
-If you want to run the TCP benchmarks, you can do so by running the following in separate shell sessions:
+If you want to run the TCP benchmarks, make sure you built the tcp server and client in `app/build-release`.
+Then you can run the following commands in separate shell sessions:
 ```sh
-./tcp_run_servers.sh <num_servers>
-./tcp_run_clients.sh <num_clients>
+# Start the TCP server, listens for incoming TCP connections on port 1300, distributed the TCP connections
+# across shards.
+./tcp_run_server.sh <num_shards>
+# Start the TCP clients. This starts #num_clients independent client processes that have #server_shards
+# shards each. Each client shard has #connections_per_client connections to the server.
+# By increasing the number of clients and the connections_per_client, you can saturate the client resouces.
+./tcp_run_clients.sh <num_clients> <server_shards> <connections_per_client>
 ```
 
-Note that we ran into some limitations with scaling multiple TCP connections on a single seastar process.
-This might just be because we aren't seastar experts.
-To keep the benchmarks simple & fair, we thus start a certain number of seastar processes and pin them to independent cores.
-We also start a set of client processes that each connect to a different seastar server.
+You can play around with different configurations to see how the performance changes.
+
