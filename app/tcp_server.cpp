@@ -5,6 +5,7 @@
 #include <seastar/core/reactor.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/sharded.hh>
+#include <seastar/core/sleep.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/net/api.hh>
@@ -27,7 +28,12 @@ public:
       // https://github.com/scylladb/seastar/issues/2183
       const uint16_t port = 1300 + SERVER_OFFSET;
       std::cout << "Starting TCP server on shard " << seastar::this_shard_id() << " - listening port: " << port << std::endl;
-      return seastar::do_with(seastar::listen(seastar::make_ipv4_address({port})), [this](auto& listener) {
+      seastar::listen_options opts;
+      opts.reuse_address = true;  
+      // We need to use port-based load balancing to ensure that the connections are distributed evenly across shards.
+      // The default load balancing policy causes all connections to be accepted by a single shard.
+      opts.lba = seastar::server_socket::load_balancing_algorithm::port; 
+      return seastar::do_with(seastar::listen(seastar::make_ipv4_address({port}), opts), [this](auto& listener) {
         std::cout << "TCP server on shard " << seastar::this_shard_id() << " now listening" << std::endl;
         listener_ = &listener;
         return seastar::repeat([this, &listener]() {
@@ -63,11 +69,15 @@ public:
 
   seastar::future<> setup_reporter()
   {
-    timer.set_callback([this]() {
-      measurements.tick();
+    // Interleave shards by 10 milliseconds to ensure that the report printing in cout doesn't
+    // interleave.
+    return seastar::sleep(std::chrono::milliseconds(10* seastar::this_shard_id())).then([this]() {
+      timer.set_callback([this]() {
+        measurements.tick();
+      });
+      timer.arm_periodic(std::chrono::seconds(1));
+      return seastar::make_ready_future<>();
     });
-    timer.arm_periodic(std::chrono::seconds(1));
-    return seastar::make_ready_future<>();
   }
 
   std::vector<Measurement> get_measurements() const

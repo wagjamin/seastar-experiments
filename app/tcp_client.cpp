@@ -32,45 +32,48 @@ public:
 
     // Create multiple concurrent connections
     for (uint16_t i = 0; i < CONCURRENT_CONNECTIONS; ++i) {
-      (void)seastar::with_gate(gate_,
-          [this, i, &server_ip, target_port]() {
-            return seastar::connect(seastar::make_ipv4_address({server_ip, target_port}))
-                .then([this, i](seastar::connected_socket socket) {
-                  auto packet = std::vector<char>(PACKET_SIZE, 'A');
-                  auto output = socket.output();
+      std::cout << "Starting task " << i << " for shard " << seastar::this_shard_id() << std::endl;
+      (void)seastar::with_gate(gate_, [this, i, &server_ip, target_port]() {
+        return seastar::connect(seastar::make_ipv4_address({server_ip, target_port}))
+            .then([this, i](seastar::connected_socket socket) {
+              auto packet = std::vector<char>(PACKET_SIZE, 'A');
+              auto output = socket.output();
 
-                  return seastar::do_with(
-                      std::move(output), std::move(packet), [this, i](seastar::output_stream<char>& output, auto& packet) {
-                        return seastar::repeat([this, &output, &packet, i]() {
-                          if (interrupted_) {
-                            return output.close().then([] {
-                              return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
-                            });
-                          }
-
-                          return output.write(packet.data(), packet.size())
-                              .then([&output] {
-                                return output.flush();
-                              })
-                              .then([this] {
-                                measurements.add_bytes(PACKET_SIZE);
-                                measurements.add_packets(1);
-                                return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::no);
-                              });
-                        });
-                      });
-                })
-                .handle_exception([i](std::exception_ptr ep) {
-                  try {
-                    std::rethrow_exception(ep);
-                  } catch (const std::exception& e) {
-                    std::cerr << "Connection " << i << " failed: " << e.what() << std::endl;
+              return seastar::do_with(std::move(output), std::move(packet), [this, i](seastar::output_stream<char>& output, auto& packet) {
+                return seastar::repeat([this, &output, &packet, i]() {
+                  if (interrupted_) {
+                    return output.close().then([] {
+                      return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
+                    });
                   }
-                  return seastar::make_ready_future<>();
+
+                  return output
+                      .write(packet.data(), packet.size())
+                      // .then([&output] {
+                      //   return output.flush();
+                      // })
+                      // .then([&output] {
+                      // return seastar::sleep(std::chrono::milliseconds(10));
+                      // })
+                      .then([this] {
+                        measurements.add_bytes(PACKET_SIZE);
+                        measurements.add_packets(1);
+                        return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::no);
+                      });
                 });
-          });
+              });
+            })
+            .handle_exception([i](std::exception_ptr ep) {
+              try {
+                std::rethrow_exception(ep);
+              } catch (const std::exception& e) {
+                std::cerr << "Connection " << i << " failed: " << e.what() << std::endl;
+              }
+              return seastar::make_ready_future<>();
+            });
+      });
     }
-    
+
     return gate_.close();
   }
 
@@ -83,11 +86,15 @@ public:
 
   seastar::future<> setup_reporter()
   {
-    timer.set_callback([this]() {
-      measurements.tick();
+    // Interleave shards by 10 milliseconds to ensure that the report printing in cout doesn't
+    // interleave.
+    return seastar::sleep(std::chrono::milliseconds(10* seastar::this_shard_id())).then([this]() {
+      timer.set_callback([this]() {
+        measurements.tick();
+      });
+      timer.arm_periodic(std::chrono::seconds(1));
+      return seastar::make_ready_future<>();
     });
-    timer.arm_periodic(std::chrono::seconds(1));
-    return seastar::make_ready_future<>();
   }
 
   std::vector<Measurement> get_measurements() const
