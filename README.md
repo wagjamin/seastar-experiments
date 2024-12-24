@@ -48,13 +48,13 @@ Plot:
 If you want to run the TCP benchmarks, make sure you built the tcp server and client in `app/build-release`.
 Then you can run the following commands in separate shell sessions:
 ```sh
-# Start the TCP server, listens for incoming TCP connections on port 1300, distributed the TCP connections
-# across shards.
+# Start the TCP server, and listens for incoming TCP connections on port 1300.
+# Distributes the TCP connections across shards.
 ./tcp_run_server.sh <num_shards>
-# Start the TCP clients. This starts #num_clients independent client processes that have #server_shards
-# shards each. Each client shard has #connections_per_client connections to the server.
-# By increasing the number of clients and the connections_per_client, you can saturate the client resouces.
-./tcp_run_clients.sh <num_clients> <server_shards> <connections_per_client>
+# Start the TCP client. The client has #client_shards shards.
+# Eachshard has #connections_per_client connections to the server.
+# By increasing the number of shards and the connections_per_client, you can saturate the client resouces.
+./tcp_run_clients.sh <client_shards> <connections_per_client>
 ```
 
 You can play around with different configurations to see how the performance changes.
