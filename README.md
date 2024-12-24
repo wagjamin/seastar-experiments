@@ -54,7 +54,7 @@ Then you can run the following commands in separate shell sessions:
 # Start the TCP client. The client has #client_shards shards.
 # Eachshard has #connections_per_client connections to the server.
 # By increasing the number of shards and the connections_per_client, you can saturate the client resouces.
-./tcp_run_clients.sh <client_shards> <connections_per_client>
+./tcp_run_client.sh <client_shards> <connections_per_client> [<server_ip>]
 ```
 
 You can play around with different configurations to see how the performance changes.
