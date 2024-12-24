@@ -14,12 +14,9 @@
 #include "common.hpp"
 
 constexpr uint16_t PACKET_SIZE = 8000;
-/// With our internal benchmarking, we've seen that starting concurrent connections
-/// is ineffective. For some reason, only one of the connections is active unless we
-/// add a high sleep count.
+/// The number of concurrent TCP connections per shard.
 constexpr uint16_t DEFAULT_CONCURRENT_CONNECTIONS = 1;
 uint16_t CONCURRENT_CONNECTIONS;
-uint16_t CLIENT_OFFSET;
 
 /// A sharded client across cores.
 class throughput_service
@@ -27,14 +24,13 @@ class throughput_service
 public:
   seastar::future<> run_tcp(const std::string& server_ip)
   {
-    const uint16_t target_port = 1300 + CLIENT_OFFSET;
-    std::cout << "Shard " << seastar::this_shard_id() << " writing to TCP port " << target_port << std::endl;
+    std::cout << "Shard " << seastar::this_shard_id() << " writing to TCP port " << TCP_SERVER_PORT << std::endl;
 
     // Create multiple concurrent connections
     for (uint16_t i = 0; i < CONCURRENT_CONNECTIONS; ++i) {
       std::cout << "Starting task " << i << " for shard " << seastar::this_shard_id() << std::endl;
-      (void)seastar::with_gate(gate_, [this, i, &server_ip, target_port]() {
-        return seastar::connect(seastar::make_ipv4_address({server_ip, target_port}))
+      (void)seastar::with_gate(gate_, [this, i, &server_ip]() {
+        return seastar::connect(seastar::make_ipv4_address({server_ip, TCP_SERVER_PORT}))
             .then([this, i](seastar::connected_socket socket) {
               auto packet = std::vector<char>(PACKET_SIZE, 'A');
               auto output = socket.output();
@@ -53,7 +49,7 @@ public:
                       //   return output.flush();
                       // })
                       // .then([&output] {
-                      // return seastar::sleep(std::chrono::milliseconds(10));
+                      //   return seastar::sleep(std::chrono::milliseconds(10));
                       // })
                       .then([this] {
                         measurements.add_bytes(PACKET_SIZE);
@@ -122,7 +118,7 @@ seastar::future<> write_throughput_report(seastar::sharded<throughput_service>& 
       })
       // Then, take the measurements and dump them to a file.
       .then([](auto shard_measurements) {
-        dump_measurements("client_report_" + std::to_string(CLIENT_OFFSET) + ".csv", shard_measurements);
+        dump_measurements("client_report.csv", shard_measurements);
         return seastar::make_ready_future<>();
       });
 }
@@ -138,7 +134,6 @@ int main(int argc, char** argv)
 
   return app.run(argc, argv, [&app] {
     CONCURRENT_CONNECTIONS = app.configuration()["connections"].as<uint16_t>();
-    CLIENT_OFFSET = app.configuration()["client_offset"].as<uint16_t>();
     auto service = std::make_shared<seastar::sharded<throughput_service>>();
 
     seastar::engine().at_exit([service] {

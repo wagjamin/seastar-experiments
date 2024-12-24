@@ -5,6 +5,6 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-./app/build-release/tcp_server --smp $1 --cpuset=0-$1 --server_offset 0 &
+./app/build-release/tcp_server --smp $1 --cpuset=0-$1 &
 
 wait
