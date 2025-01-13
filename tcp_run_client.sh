@@ -30,7 +30,7 @@ else
 fi
 
 cpuset_start=$server_smp_count
-cpuset_end=$((cpuset_start + client_shards))
+cpuset_end=$((cpuset_start + client_shards - 1))
 
 ./app/build-release/tcp_client \
   --smp $client_shards \
