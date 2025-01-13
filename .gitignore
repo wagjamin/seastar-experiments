@@ -6,3 +6,5 @@ app/build-release
 plot/server_results.pdf
 plot/client_results.pdf
 .venv
+.cache/
+compile_commands.json
