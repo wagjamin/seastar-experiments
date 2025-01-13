@@ -22,3 +22,13 @@ add_executable (tcp_client
   tcp_client.cpp)
 target_link_libraries (tcp_client
   Seastar::seastar)
+
+add_executable (tcp_server_pingpong
+  tcp_server_pingpong.cpp)
+target_link_libraries (tcp_server_pingpong
+  Seastar::seastar)
+
+add_executable (tcp_client_pingpong
+  tcp_client_pingpong.cpp)
+target_link_libraries (tcp_client_pingpong
+  Seastar::seastar)
