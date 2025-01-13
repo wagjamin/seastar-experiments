@@ -30,6 +30,7 @@ cpuset_start=$server_smp_count
 cpuset_end=$((cpuset_start + $1 - 1))
 
 ./app/build-release/udp_duplex \
+  --data_size 64000 \
   --smp $1 \
   --cpuset=${cpuset_start}-${cpuset_end} \
   --connections $2 \

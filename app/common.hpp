@@ -9,7 +9,6 @@
 
 // Common utilities across the client/server implementations.
 constexpr uint16_t TCP_SERVER_PORT = 1300;
-constexpr uint32_t DATA_SIZE = 64;
 
 // Historical traffic measurements in gbit/s and pps.
 struct Measurement

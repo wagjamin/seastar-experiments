@@ -13,6 +13,9 @@
 
 #include "common.hpp"
 
+constexpr uint32_t DEFAULT_DATA_SIZE = 64;
+uint32_t DATA_SIZE;
+
 /// A sharded service across cores.
 class throughput_service
 {
@@ -169,8 +172,10 @@ seastar::future<> write_throughput_report(seastar::sharded<throughput_service>& 
 int main(int argc, char** argv)
 {
   seastar::app_template app;
+  app.add_options()("data_size", boost::program_options::value<uint32_t>()->default_value(DEFAULT_DATA_SIZE), "Size of the data to send in bytes");
 
   return app.run(argc, argv, [&app] {
+    DATA_SIZE = app.configuration()["data_size"].as<uint32_t>();
     auto service = std::make_shared<seastar::sharded<throughput_service>>();
 
     seastar::engine().at_exit([service] {

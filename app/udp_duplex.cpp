@@ -22,6 +22,9 @@ uint16_t MY_PORT_OFFSET;
 /// The offset for the UDP server port for the other shard.
 uint16_t OTHER_PORT_OFFSET;
 
+constexpr uint32_t DEFAULT_DATA_SIZE = 64;
+uint32_t DATA_SIZE;
+
 /// A sharded client across cores.
 class throughput_service
 {
@@ -151,6 +154,7 @@ int main(int argc, char** argv)
   seastar::app_template app;
   app.add_options()("other_ip", boost::program_options::value<std::string>()->default_value("127.0.0.1"), "IP address of the server to connect to")(
       "connections", boost::program_options::value<uint16_t>()->default_value(1), "Number of concurrent connections per core")(
+      "data_size", boost::program_options::value<uint32_t>()->default_value(DEFAULT_DATA_SIZE), "Size of the data to send in bytes")(
       "my_offset", boost::program_options::value<uint16_t>()->default_value(1024), "Client offset for the server shard to connect to")(
       "other_offset", boost::program_options::value<uint16_t>()->default_value(2048), "Client offset for the server shard to connect to");
 
@@ -158,6 +162,7 @@ int main(int argc, char** argv)
     CONCURRENT_CONNECTIONS = app.configuration()["connections"].as<uint16_t>();
     MY_PORT_OFFSET = app.configuration()["my_offset"].as<uint16_t>();
     OTHER_PORT_OFFSET = app.configuration()["other_offset"].as<uint16_t>();
+    DATA_SIZE = app.configuration()["data_size"].as<uint32_t>();
     auto service = std::make_shared<seastar::sharded<throughput_service>>();
 
     seastar::engine().at_exit([service] {

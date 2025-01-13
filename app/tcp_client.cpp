@@ -16,6 +16,8 @@
 /// The number of concurrent TCP connections per shard.
 constexpr uint16_t DEFAULT_CONCURRENT_CONNECTIONS = 1;
 uint16_t CONCURRENT_CONNECTIONS;
+constexpr uint32_t DEFAULT_DATA_SIZE = 64;
+uint32_t DATA_SIZE;
 
 /// A sharded client across cores.
 class throughput_service
@@ -151,9 +153,11 @@ int main(int argc, char** argv)
       "connections",
       boost::program_options::value<uint16_t>()->default_value(DEFAULT_CONCURRENT_CONNECTIONS),
       "Number of concurrent connections per core")(
+      "data_size", boost::program_options::value<uint32_t>()->default_value(DEFAULT_DATA_SIZE), "Size of the data to send in bytes")(
       "client_offset", boost::program_options::value<uint16_t>()->default_value(0), "Client offset for the server shard to connect to");
 
   return app.run(argc, argv, [&app] {
+    DATA_SIZE = app.configuration()["data_size"].as<uint32_t>();
     CONCURRENT_CONNECTIONS = app.configuration()["connections"].as<uint16_t>();
     auto service = std::make_shared<seastar::sharded<throughput_service>>();
 
