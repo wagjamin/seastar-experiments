@@ -9,9 +9,11 @@
 
 // Common utilities across the client/server implementations.
 constexpr uint16_t TCP_SERVER_PORT = 1300;
+constexpr uint32_t DATA_SIZE = 64;
 
 // Historical traffic measurements in gbit/s and pps.
-struct Measurement {
+struct Measurement
+{
   seastar::shard_id shard_id;
   std::chrono::time_point<std::chrono::system_clock> time;
   double gbits;
@@ -19,10 +21,15 @@ struct Measurement {
 };
 
 // TODO(benjamin): no prize for this name \_(-.-)_/
-struct MeasurementDevice {
- public:
+struct MeasurementDevice
+{
+public:
   // Attach one more measurement to the device history.
-  void tick() {
+  void tick(std::string name = "")
+  {
+    if (!name.empty()) {
+      std::cout << "reporting " << name << " on shard " << seastar::this_shard_id() << std::endl;
+    }
     const size_t bytes_in_last_second = bytes_received - last_bytes_received;
     last_bytes_received = bytes_received;
     const size_t pps = packets_received - last_packets_received;
@@ -38,17 +45,25 @@ struct MeasurementDevice {
         .pps = pps,
     });
 
-    std::cout << "Throughput on shard " << seastar::this_shard_id() << ": " << throughput_in_gbps
-              << " gbps (" << pps << " pps)" << std::endl;
+    std::cout << "Throughput on shard " << seastar::this_shard_id() << ": " << throughput_in_gbps << " gbps (" << pps << " pps)" << std::endl;
   };
 
-  void add_bytes(size_t bytes) { bytes_received += bytes; };
+  void add_bytes(size_t bytes)
+  {
+    bytes_received += bytes;
+  };
 
-  void add_packets(size_t packets) { packets_received += packets; };
+  void add_packets(size_t packets)
+  {
+    packets_received += packets;
+  };
 
-  std::vector<Measurement> get_history() const { return measurements; }
+  std::vector<Measurement> get_history() const
+  {
+    return measurements;
+  }
 
- private:
+private:
   // Core-local bytes received.
   size_t bytes_received = 0;
   // Core-local packets received.
@@ -62,8 +77,8 @@ struct MeasurementDevice {
 };
 
 // Dump measurements from across shards into a target file.
-void dump_measurements(const std::string& fname,
-                       const std::vector<std::vector<Measurement>>& shard_measurements) {
+inline void dump_measurements(const std::string& fname, const std::vector<std::vector<Measurement>>& shard_measurements)
+{
   std::ofstream file(fname);
   if (!file.is_open()) {
     std::cerr << "Can't open benchmark report file" << std::endl;
@@ -75,9 +90,8 @@ void dump_measurements(const std::string& fname,
   for (const auto& shard : shard_measurements) {
     for (const auto& measurement : shard) {
       const auto dur = measurement.time.time_since_epoch();
-      file << std::chrono::duration_cast<std::chrono::milliseconds>(dur).count() << ","
-           << measurement.shard_id << "," << measurement.gbits << "," << measurement.pps
-           << std::endl;
+      file << std::chrono::duration_cast<std::chrono::milliseconds>(dur).count() << "," << measurement.shard_id << "," << measurement.gbits << ","
+           << measurement.pps << std::endl;
     }
   }
 

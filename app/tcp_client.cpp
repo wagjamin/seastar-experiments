@@ -13,7 +13,6 @@
 
 #include "common.hpp"
 
-constexpr uint16_t PACKET_SIZE = 8000;
 /// The number of concurrent TCP connections per shard.
 constexpr uint16_t DEFAULT_CONCURRENT_CONNECTIONS = 1;
 uint16_t CONCURRENT_CONNECTIONS;
@@ -30,35 +29,9 @@ public:
     for (uint16_t i = 0; i < CONCURRENT_CONNECTIONS; ++i) {
       std::cout << "Starting task " << i << " for shard " << seastar::this_shard_id() << std::endl;
       (void)seastar::with_gate(gate_, [this, i, &server_ip]() {
-        return seastar::connect(seastar::make_ipv4_address({server_ip, TCP_SERVER_PORT}))
-            .then([this, i](seastar::connected_socket socket) {
-              auto packet = std::vector<char>(PACKET_SIZE, 'A');
-              auto output = socket.output();
-
-              return seastar::do_with(std::move(output), std::move(packet), [this, i](seastar::output_stream<char>& output, auto& packet) {
-                return seastar::repeat([this, &output, &packet, i]() {
-                  if (interrupted_) {
-                    return output.close().then([] {
-                      return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
-                    });
-                  }
-
-                  return output
-                      .write(packet.data(), packet.size())
-                      // .then([&output] {
-                      //   return output.flush();
-                      // })
-                      // .then([&output] {
-                      //   return seastar::sleep(std::chrono::milliseconds(10));
-                      // })
-                      .then([this] {
-                        measurements.add_bytes(PACKET_SIZE);
-                        measurements.add_packets(1);
-                        return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::no);
-                      });
-                });
-              });
-            });
+        return seastar::connect(seastar::make_ipv4_address({server_ip, TCP_SERVER_PORT})).then([this, i](seastar::connected_socket socket) {
+          return handle_connection(std::move(socket), i);
+        });
       });
     }
 
@@ -78,25 +51,73 @@ public:
     // interleave.
     return seastar::sleep(std::chrono::milliseconds(10 * seastar::this_shard_id())).then([this]() {
       timer.set_callback([this]() {
-        measurements.tick();
+        read_measurements.tick("read");
+        write_measurements.tick("write");
       });
       timer.arm_periodic(std::chrono::seconds(1));
       return seastar::make_ready_future<>();
     });
   }
 
-  std::vector<Measurement> get_measurements() const
+  std::vector<Measurement> get_read_measurements() const
   {
-    return measurements.get_history();
+    return read_measurements.get_history();
+  };
+
+  std::vector<Measurement> get_write_measurements() const
+  {
+    return write_measurements.get_history();
   };
 
 private:
+  seastar::future<> handle_connection(seastar::connected_socket socket, uint16_t i)
+  {
+    auto packet = std::vector<char>(DATA_SIZE, 'A');
+    auto output = socket.output();
+
+    auto write_future = seastar::do_with(std::move(output), std::move(packet), [this, i](seastar::output_stream<char>& output, auto& packet) {
+      return seastar::repeat([this, &output, &packet, i]() {
+        if (interrupted_) {
+          return output.close().then([] {
+            return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
+          });
+        }
+
+        return output.write(packet.data(), packet.size()).then([this] {
+          write_measurements.add_bytes(DATA_SIZE);
+          write_measurements.add_packets(1);
+          return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::no);
+        });
+      });
+    });
+
+    auto input = socket.input();
+
+    auto read_future = seastar::do_with(std::move(input), [this, i](seastar::input_stream<char>& input) {
+      return seastar::repeat([this, &input]() {
+        if (interrupted_) {
+          return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
+        }
+        return input.read_exactly(DATA_SIZE).then([this](seastar::temporary_buffer<char> buf) {
+          if (buf.size() > 0) {
+            read_measurements.add_bytes(buf.size());
+            read_measurements.add_packets(1);
+            return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::no);
+          }
+          return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
+        });
+      });
+    });
+    return seastar::when_all_succeed(write_future.discard_result(), read_future.discard_result()).discard_result();
+  }
+
   // Interrupt gate to know when we need to stop working.
   bool interrupted_ = false;
   // Core-local timer to report throughput.
   seastar::timer<> timer;
   // The throughput measurements for this shard.
-  MeasurementDevice measurements;
+  MeasurementDevice read_measurements;
+  MeasurementDevice write_measurements;
   seastar::gate gate_;
 };
 
@@ -106,11 +127,19 @@ seastar::future<> write_throughput_report(seastar::sharded<throughput_service>& 
   return service
       // First, retrieve the measurements from every shard.
       .map([](throughput_service& service) {
-        return service.get_measurements();
+        return std::make_pair(service.get_read_measurements(), service.get_write_measurements());
       })
       // Then, take the measurements and dump them to a file.
       .then([](auto shard_measurements) {
-        dump_measurements("client_report.csv", shard_measurements);
+        std::vector<std::vector<Measurement>> read_measurements;
+        std::vector<std::vector<Measurement>> write_measurements;
+        for (auto& [read, write] : shard_measurements) {
+          read_measurements.push_back(std::move(read));
+          write_measurements.push_back(std::move(write));
+        }
+
+        dump_measurements("client_report_read.csv", read_measurements);
+        dump_measurements("client_report_write.csv", write_measurements);
         return seastar::make_ready_future<>();
       });
 }
