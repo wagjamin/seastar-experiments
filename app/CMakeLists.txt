@@ -32,3 +32,8 @@ add_executable (tcp_client_pingpong
   tcp_client_pingpong.cpp)
 target_link_libraries (tcp_client_pingpong
   Seastar::seastar)
+
+add_executable (udp_duplex
+  udp_duplex.cpp)
+target_link_libraries (udp_duplex
+  Seastar::seastar)
