@@ -84,35 +84,37 @@ Cloud DPDK backend:
 Setup: user-space server nic ip: 172.31.32.120, user-space client nic ip: 172.31.32.121
 ```sh
 # Server
-server_shards=1
-./app/build-release/tcp_server \
+server_shards=1 && \
+sudo ./app/build-release/tcp_server \
  --smp $server_shards \
   --cpuset=0-$(($server_shards - 1)) \
- --network-stack native --dpdk-pmd --dhcp 0 --host-ipv4-addr 172.31.32.120 --netmask-ipv4-addr 255.255.240.0
+ --network-stack native --dpdk-pmd
 
 # Client
-client_shards=1
-server_ip="172.31.32.120"
-connections_per_client=1
-./app/build-release/tcp_client \
+client_shards=1 && \
+server_ip="172.31.32.120" && \
+connections_per_client=32 && \
+sudo ./app/build-release/tcp_client \
   --smp $client_shards \
   --cpuset=0-$(($client_shards - 1)) \
   --connections $connections_per_client \
   --server_ip "$server_ip" \
-  --network-stack native --dpdk-pmd --dhcp 0 --host-ipv4-addr 172.31.32.121 --netmask-ipv4-addr 255.255.240.0
+  --network-stack native --dpdk-pmd
 ```
+
+Setup: kernel server nic ip: 172.31.32.20, kernel client nic ip: 172.31.32.21
 Cloud Uring backend:
 ```sh
 # Server
-server_shards=1
+server_shards=1 && \
 ./app/build-release/tcp_server \
  --smp $server_shards \
-  --cpuset=0-$(($server_shards - 1)) \
+  --cpuset=0-$(($server_shards - 1))
 
 # Client
-client_shards=1
-server_ip="172.31.32.20"
-connections_per_client=1
+client_shards=1 && \
+server_ip="172.31.32.20" && \
+connections_per_client=128 && \
 ./app/build-release/tcp_client \
   --smp $client_shards \
   --cpuset=0-$(($client_shards - 1)) \
