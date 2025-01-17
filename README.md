@@ -22,6 +22,17 @@ cd seastar-experiments && \
 git checkout minimal-example
 ```
 
+# Install dpdk
+```sh
+sudo apt-get install -y build-essential linux-image-extra-$(uname -r) && \
+cd seastar && \
+cd dpdk && \
+meson setup build && \
+cd build && \
+ninja && \
+sudo meson install
+```
+
 To build the microbenchmark locally, run:
 ```sh
 # Local seastar installation as a static library. Requires sudo priviliges for system installation.
