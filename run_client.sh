@@ -17,10 +17,10 @@ server_ip=${3:-"127.0.0.1"}
 server_smp_count=0
 
 if [ -z "$3" ]; then
-  server_smp_count=$(ps -C tcp_server_pingpong -o args= | sed -nE 's/.*--smp ([0-9]+).*/\1/p')
+  server_smp_count=$(ps -C tcp_server -o args= | sed -nE 's/.*--smp ([0-9]+).*/\1/p')
 
   if [ -z "$server_smp_count" ]; then
-    echo "Error: No local tcp_server_pingpong found."
+    echo "Error: No local tcp_server found."
     exit 1
   fi  
 
@@ -32,10 +32,10 @@ fi
 cpuset_start=$server_smp_count
 cpuset_end=$((cpuset_start + client_shards - 1))
 
-./app/build-release/tcp_client_pingpong \
+
+./app/build-release/tcp_client \
   --smp $client_shards \
   --cpuset=${cpuset_start}-${cpuset_end} \
   --connections $connections_per_client \
-  --server_ip "$server_ip" &
-
-wait 
+  --server_ip "$server_ip" \
+  # --network-stack native --dpdk-pmd --dhcp 0 --host-ipv4-addr 172.31.32.121 --netmask-ipv4-addr 255.255.240.0 \

@@ -12,61 +12,99 @@ Seastar has different backends, including a DPDK one.
 
 Note that we point seastar to `871079a9ae` which is a recent commit off master as of October 2024.
 
+Clone the seastar repo including the submodule:
+```sh
+git clone --recurse-submodules https://github.com/wagjamin/seastar-experiments.git
+```
+Checkout this minimal-example branch:
+```sh
+cd seastar-experiments && \
+git checkout minimal-example
+```
+
 To build the microbenchmark locally, run:
 ```sh
 # Local seastar installation as a static library. Requires sudo priviliges for system installation.
 ./install_seastar.sh
 # Go into custom microbenchmark
-mkdir -p app/build-debug
-cd app/build-debug
+mkdir -p app/build-release && \
+cd app/build-release
 # And build the microbenchmark binaries. Note that compilation with clang doesn't work
-cmake -DCMAKE_BUILD_TYPE=Debug -GNinja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_EXPORT_COMPILE_COMMANDS=1 ..
-ninja
+cmake -DCMAKE_BUILD_TYPE=Release -GNinja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_EXPORT_COMPILE_COMMANDS=1 .. && \
+cd ../.. && \
+ninja -C app/build-release -j $(nproc)
 ```
 
-### Running UDP Benchmarks
+### Running TCP Benchmarks
 After that, you can easily run both the server and the client:
 ```sh
 # Start the server, listens for UDP packets on ports [1200, ..., 1200 + <num_shards>[
-./server [--smp <num_shards>]
+./app/build-release/tcp_server [--smp <num_shards>] [--cpuset=0-<num_shards-1>] [--data_size <receive/send buffer size>]
 
 # Start the client, sends UDP packets to ports [1200, ..., 1200 + <num_shards>[ on <target_ip>
 # If no target IP is provided, simply sends to 127.0.0.1
-./client [--smp <num_shards>] [--server_ip "<target ip>"]
+./app/build-release/tcp_client [--smp <num_shards>] [--cpuset=0-<num_shards-1>] [--connections <connections_per_shard>] [--server_ip "<target ip>"] [--data_size <receive/send buffer size>]
 ```
 
-Then run:
+By default, seastar will use the io_uring backend.
+To enable full user-space networking, add these command line arguments:
+```
+--network-stack native --dpdk-pmd --dhcp 0 --host-ipv4-addr <user_space_nic_ip> --netmask-ipv4-addr 255.255.240.0
+```
+
+Example execution:
+Localhost:
 ```sh
-sudo sysctl -w kernel.perf_event_paranoid=1
+# Server
+./app/build-release/tcp_server \
+ --smp 1 \
+  --cpuset=0-0
+
+# Client
+connections_per_client=128
+./app/build-release/tcp_client \
+  --smp 1 \
+  --cpuset=1-1 \
+  --connections $connections_per_client \
+  --server_ip "127.0.0.1"
 ```
 
-Plot:
-- Receive PPS given a certain number of CPU cores
-- No acknowledging, server just sends packets and we see what arrives on the consumer side
-
-### Running TCP Benchmarks
-#### Running the Experiments
-If you want to run the TCP benchmarks, make sure you built the tcp server and client in `app/build-release`.
-Then you can run the following commands in separate shell sessions:
+Cloud DPDK backend:
+Setup: user-space server nic ip: 172.31.32.120, user-space client nic ip: 172.31.32.121
 ```sh
-# Start the TCP server, and listens for incoming TCP connections on port 1300.
-# Distributes the TCP connections across shards.
-./tcp_run_server.sh <num_shards>
-# Start the TCP client. The client has #client_shards shards.
-# Eachshard has #connections_per_client connections to the server.
-# By increasing the number of shards and the connections_per_client, you can saturate the client resouces.
-./tcp_run_client.sh <client_shards> <connections_per_client> [<server_ip>]
+# Server
+server_shards=1
+./app/build-release/tcp_server \
+ --smp $server_shards \
+  --cpuset=0-$(($server_shards - 1)) \
+ --network-stack native --dpdk-pmd --dhcp 0 --host-ipv4-addr 172.31.32.120 --netmask-ipv4-addr 255.255.240.0
+
+# Client
+client_shards=1
+server_ip="172.31.32.120"
+connections_per_client=1
+./app/build-release/tcp_client \
+  --smp $client_shards \
+  --cpuset=0-$(($client_shards - 1)) \
+  --connections $connections_per_client \
+  --server_ip "$server_ip" \
+  --network-stack native --dpdk-pmd --dhcp 0 --host-ipv4-addr 172.31.32.121 --netmask-ipv4-addr 255.255.240.0
 ```
-
-You can play around with different configurations to see how the performance changes.
-
-### Plotting the Results
-If you want to plot the results after running the experiments, you can run:
+Cloud Uring backend:
 ```sh
-pip3 install -r plot/requirements.txt
-python3 plot/plot_results.py
+# Server
+server_shards=1
+./app/build-release/tcp_server \
+ --smp $server_shards \
+  --cpuset=0-$(($server_shards - 1)) \
+
+# Client
+client_shards=1
+server_ip="172.31.32.20"
+connections_per_client=1
+./app/build-release/tcp_client \
+  --smp $client_shards \
+  --cpuset=0-$(($client_shards - 1)) \
+  --connections $connections_per_client \
+  --server_ip "$server_ip"
 ```
-This will generate pdf plots in the `plot` directory that show the throughput and PPS over time.
-Note that PPS here is a bit misleading. This is the client- and server-side packets that are
-passed between the benchmark program and seastar.
-So this doesn't relate to the actual PPS passed over the network card.

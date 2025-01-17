@@ -8,6 +8,6 @@
 # git submodule update --init --recursive
 cd seastar
 sudo ./install-dependencies.sh
-./configure.py --mode=release --prefix=/usr/local
-sudo ninja -C build/release install
+./configure.py --mode release --enable-dpdk --cflags='-march=armv8-a+crc+crypto' --prefix=/usr/local
+sudo ninja -C build/release install -j $(nproc)
 

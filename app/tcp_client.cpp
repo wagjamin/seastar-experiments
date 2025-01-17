@@ -16,7 +16,7 @@
 /// The number of concurrent TCP connections per shard.
 constexpr uint16_t DEFAULT_CONCURRENT_CONNECTIONS = 1;
 uint16_t CONCURRENT_CONNECTIONS;
-constexpr uint32_t DEFAULT_DATA_SIZE = 64;
+constexpr uint32_t DEFAULT_DATA_SIZE = 65476;  // TCP MSS
 uint32_t DATA_SIZE;
 
 /// A sharded client across cores.
@@ -25,8 +25,6 @@ class throughput_service
 public:
   seastar::future<> run_tcp(const std::string& server_ip)
   {
-    std::cout << "Shard " << seastar::this_shard_id() << " writing to TCP port " << TCP_SERVER_PORT << std::endl;
-
     // Create multiple concurrent connections
     for (uint16_t i = 0; i < CONCURRENT_CONNECTIONS; ++i) {
       std::cout << "Starting task " << i << " for shard " << seastar::this_shard_id() << std::endl;
@@ -53,22 +51,16 @@ public:
     // interleave.
     return seastar::sleep(std::chrono::milliseconds(10 * seastar::this_shard_id())).then([this]() {
       timer.set_callback([this]() {
-        read_measurements.tick("read");
-        write_measurements.tick("write");
+        measurements.tick();
       });
       timer.arm_periodic(std::chrono::seconds(1));
       return seastar::make_ready_future<>();
     });
   }
 
-  std::vector<Measurement> get_read_measurements() const
+  std::vector<Measurement> get_measurements() const
   {
-    return read_measurements.get_history();
-  };
-
-  std::vector<Measurement> get_write_measurements() const
-  {
-    return write_measurements.get_history();
+    return measurements.get_history();
   };
 
 private:
@@ -86,8 +78,7 @@ private:
         }
 
         return output.write(packet.data(), packet.size()).then([this] {
-          write_measurements.add_bytes(DATA_SIZE);
-          write_measurements.add_packets(1);
+          measurements.add_bytes_sent(DATA_SIZE);
           return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::no);
         });
       });
@@ -102,8 +93,7 @@ private:
         }
         return input.read_exactly(DATA_SIZE).then([this](seastar::temporary_buffer<char> buf) {
           if (buf.size() > 0) {
-            read_measurements.add_bytes(buf.size());
-            read_measurements.add_packets(1);
+            measurements.add_bytes_received(buf.size());
             return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::no);
           }
           return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
@@ -118,8 +108,7 @@ private:
   // Core-local timer to report throughput.
   seastar::timer<> timer;
   // The throughput measurements for this shard.
-  MeasurementDevice read_measurements;
-  MeasurementDevice write_measurements;
+  MeasurementDevice measurements;
   seastar::gate gate_;
 };
 
@@ -129,19 +118,16 @@ seastar::future<> write_throughput_report(seastar::sharded<throughput_service>& 
   return service
       // First, retrieve the measurements from every shard.
       .map([](throughput_service& service) {
-        return std::make_pair(service.get_read_measurements(), service.get_write_measurements());
+        return service.get_measurements();
       })
       // Then, take the measurements and dump them to a file.
       .then([](auto shard_measurements) {
-        std::vector<std::vector<Measurement>> read_measurements;
-        std::vector<std::vector<Measurement>> write_measurements;
-        for (auto& [read, write] : shard_measurements) {
-          read_measurements.push_back(std::move(read));
-          write_measurements.push_back(std::move(write));
+        std::vector<std::vector<Measurement>> measurements;
+        for (auto& shard_measurement : shard_measurements) {
+          measurements.push_back(std::move(shard_measurement));
         }
 
-        dump_measurements("client_report_read.csv", read_measurements);
-        dump_measurements("client_report_write.csv", write_measurements);
+        dump_measurements("client_report.csv", measurements);
         return seastar::make_ready_future<>();
       });
 }
